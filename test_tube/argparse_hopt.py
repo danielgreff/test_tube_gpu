@@ -8,7 +8,7 @@ import traceback
 from argparse import ArgumentParser
 from copy import deepcopy
 from gettext import gettext as _
-from multiprocessing import Pool, Queue
+from torch.multiprocessing import Pool, Queue
 from time import sleep
 
 import numpy as np
@@ -18,8 +18,8 @@ from .hyper_opt_utils import strategies
 # needed to work with pytorch multiprocess
 try:
     import torch
-    import multiprocessing
-    # multiprocessing.set_start_method('spawn', force=True)
+    import torch.multiprocessing
+    torch.multiprocessing.set_start_method('spawn', force=True)
 except ModuleNotFoundError:
     pass
 
@@ -63,6 +63,10 @@ def optimize_parallel_cpu_private(args):
     # True = completed
     return [trial_params, results]
 
+# called by the Pool when a process starts
+def init(local_gpu_q):
+    global g_gpu_id_q
+    g_gpu_id_q = local_gpu_q
 
 class HyperOptArgumentParser(ArgumentParser):
     """
@@ -312,11 +316,6 @@ class HyperOptArgumentParser(ArgumentParser):
             for gpu_id in gpu_ids:
                 gpu_q.put(gpu_id)
 
-            # called by the Pool when a process starts
-            def init(local_gpu_q):
-                global g_gpu_id_q
-                g_gpu_id_q = local_gpu_q
-
             # init a pool with the nb of worker threads we want
             nb_workers = len(gpu_ids)
             self.pool = Pool(processes=nb_workers, initializer=init, initargs=(gpu_q,))
@@ -350,11 +349,6 @@ class HyperOptArgumentParser(ArgumentParser):
             gpu_q = Queue()
             for gpu_id in gpu_ids:
                 gpu_q.put(gpu_id)
-
-            # called by the Pool when a process starts
-            def init(local_gpu_q):
-                global g_gpu_id_q
-                g_gpu_id_q = local_gpu_q
 
             # init a pool with the nb of worker threads we want
             self.pool = Pool(processes=nb_workers, initializer=init, initargs=(gpu_q,))
